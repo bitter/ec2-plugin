@@ -1,8 +1,10 @@
 package hudson.plugins.ec2;
 
-import com.xerox.amazonws.ec2.EC2Exception;
-import com.xerox.amazonws.ec2.ReservationDescription.Instance;
+import com.xerox.amazonws.ec2.ReservationDescription;
+import hudson.model.Descriptor;
 import hudson.model.TaskListener;
+import hudson.plugins.ec2.EC2Computer;
+import hudson.plugins.ec2.InstanceState;
 import hudson.slaves.ComputerLauncher;
 import hudson.slaves.SlaveComputer;
 
@@ -11,6 +13,8 @@ import java.io.PrintStream;
 
 import org.jets3t.service.S3ServiceException;
 
+import com.xerox.amazonws.ec2.EC2Exception;
+
 /**
  * {@link ComputerLauncher} for EC2 that waits for the instance to really come up before proceeding to
  * the real user-specified {@link ComputerLauncher}.
@@ -18,44 +22,58 @@ import org.jets3t.service.S3ServiceException;
  * @author Kohsuke Kawaguchi
  */
 public abstract class EC2ComputerLauncher extends ComputerLauncher {
+
+    protected static final int NUMBER_OF_RETRIES = 120;
+
     @Override
     public void launch(SlaveComputer _computer, TaskListener listener) {
+        EC2Computer computer = (EC2Computer)_computer;
         try {
-            EC2Computer computer = (EC2Computer)_computer;
-            PrintStream logger = listener.getLogger();
+            waitForComputerToEnterRunningState(computer, listener.getLogger());
+            waitForComputerToRecieveIpAddress(computer, listener.getLogger());
 
-            OUTER:
-            while(true) {
-                switch (computer.getState()) {
-                    case PENDING:
-                        Thread.sleep(5000); // check every 5 secs
-                        continue OUTER;
-                    case RUNNING:
-                        break OUTER;
-                    case SHUTTING_DOWN:
-                    case TERMINATED:
-                        // abort
-                        logger.println("The instance "+computer.getInstanceId()+" appears to be shut down. Aborting launch.");
-                        return;
-                }
-            }
+            connect(computer, listener);
 
-            launch(computer, logger, computer.describeInstance());
         } catch (EC2Exception e) {
             e.printStackTrace(listener.error(e.getMessage()));
-        } catch (IOException e) {
-            e.printStackTrace(listener.error(e.getMessage()));
         } catch (InterruptedException e) {
+            e.printStackTrace(listener.error(e.getMessage()));
+        } catch (IOException e) {
             e.printStackTrace(listener.error(e.getMessage()));
         } catch (S3ServiceException e) {
             e.printStackTrace(listener.error(e.getMessage()));
         }
+    }
 
+    private void waitForComputerToRecieveIpAddress(EC2Computer computer, PrintStream logger) throws EC2Exception, InterruptedException {
+        ReservationDescription.Instance inst = computer.updateInstanceDescription();
+        for (int i = NUMBER_OF_RETRIES; i >= 0 && "0.0.0.0".equals(computer.updateInstanceDescription().getDnsName()); i--) {
+            logger.format("Waiting instance to receive an ip address [tries left %d]\n", i);
+            Thread.sleep(5000);
+        }
+        if ("0.0.0.0".equals(computer.updateInstanceDescription().getDnsName())) {
+            throw new InterruptedException("Unable to determine ip address of " + computer.getInstanceId() + ".");
+        }
+    }
+
+    private void waitForComputerToEnterRunningState(EC2Computer computer, PrintStream logger) throws EC2Exception, InterruptedException {
+        logger.println("Waiting for instance to enter 'running' state.");
+        while (computer.getState() == InstanceState.PENDING) {
+            Thread.sleep(5000);
+        }
+        if (computer.getState() != InstanceState.RUNNING) {
+            throw new InterruptedException("The instance " + computer.getInstanceId() + " never reached a running state.");
+        }
     }
 
     /**
      * Stage 2 of the launch. Called after the EC2 instance comes up.
      */
-    protected abstract void launch(EC2Computer computer, PrintStream logger, Instance inst)
+    protected abstract void connect(EC2Computer computer, TaskListener listener)
             throws EC2Exception, IOException, InterruptedException, S3ServiceException;
+
+
+    public Descriptor<ComputerLauncher> getDescriptor() {
+        throw new UnsupportedOperationException();
+    }
 }

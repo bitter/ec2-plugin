@@ -36,6 +36,11 @@
       </exclusions>
     </dependency>
     <dependency>
+        <artifactId>ssh-slaves</artifactId>
+        <groupId>org.jenkins-ci.plugins</groupId>
+        <version>0.17-SNAPSHOT</version>
+    </dependency>
+    <dependency>
       <!-- we only use this to handle key fingerprint. should be able to replace this with trilead -->
       <groupId>bouncycastle</groupId>
       <artifactId>bcprov-jdk15</artifactId>
