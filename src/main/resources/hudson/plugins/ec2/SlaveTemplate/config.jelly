@@ -21,51 +21,98 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 -->
-<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">      <table width="100%">
-  <f:entry title="${%AMI ID}" field="ami">
-    <f:textbox />
-  </f:entry>
-  <f:validateButton title="${%Check AMI}" progress="${%Checking...}" method="validateAmi" with="secretKey,accessId,region,ami" />
-  <f:entry title="${%Instance Type}" field="type">
-    <f:enum>${it.name()}</f:enum>
-  </f:entry>
-  <f:entry title="${%Description}" help="/help/system-config/master-slave/description.html" field="description">
-    <f:textbox />
-  </f:entry>
-  <f:entry title="${%Remote FS root}" field="remoteFS">
-    <f:textbox />
-  </f:entry>
-  <f:entry title="${%Remote user}" field="remoteAdmin">
-    <f:textbox />
-  </f:entry>
-  <f:entry title="${%Labels}" field="labelString">
-    <f:textbox />
-  </f:entry>
-  <f:entry title="${%Init Script}" field="initScript">
-    <f:textarea />
-  </f:entry>
-  <f:advanced>
-    <f:entry title="${%User Data}" field="userData">
-      <f:textarea />
-    </f:entry>
-    <f:entry title="${%Number of Executors}" field="numExecutors">
-      <f:textbox />
-    </f:entry>
-    <f:entry title="${%Root command prefix}" field="rootCommandPrefix">
-      <f:textbox/>
-    </f:entry>
-    <f:entry title="${%JVM Options}" field="jvmopts">
-      <f:textbox/>
-    </f:entry>
-    <f:entry title="${%Remote ssh port}" field="sshPort">
-      <f:textbox />
-    </f:entry>
-  </f:advanced>
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout"
+         xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+  <table width="100%">
+    <f:section title="${%EC2 Image Configuration}">
 
-  <f:entry title="">
-    <div align="right">
-      <f:repeatableDeleteButton />
-    </div>
-  </f:entry>
-</table>
+    <f:entry title="${%AMI ID}" field="ami">
+      <f:textbox/>
+    </f:entry>
+    <f:validateButton title="${%Check AMI}" progress="${%Checking...}" method="validateAmi" with="secretKey,accessId,region,ami"/>
+    <f:entry title="${%Instance Type}" field="type">
+      <f:enum>${it.name()}</f:enum>
+    </f:entry>
+
+    <!-- In order to display ComputerConnector choices, we might not be able to simply import dumbSlave's description,
+     extracted from the ec2-slave-plugin -->
+
+    <!--  below we include config that looks just like dumbslave's config-entries.jelly
+    file but with computerConnector in place of computerLauncher
+    -->
+    <f:entry title="${%Description}" help="/help/system-config/master-slave/description.html">
+      <f:textbox field="description"/>
+    </f:entry>
+
+    <f:entry title="${%# of executors}" field="numExecutors">
+      <f:textbox/>
+    </f:entry>
+
+    <f:entry title="${%Remote FS root}" field="remoteFS">
+      <f:textbox/>
+    </f:entry>
+
+    <f:entry title="${%Labels}" field="labelString">
+      <f:textbox/>
+    </f:entry>
+
+    <f:advanced>
+      <f:entry title="${%User Data}" field="userData">
+        <f:textarea />
+      </f:entry>
+    </f:advanced>
+
+    <j:set var="st" value="${instance}"/>
+    <f:dropdownList name="slave.computerConnector" title="${%Connect method}"
+                    help="${descriptor.getHelpFile('connector')}" field="">
+      <j:forEach var="d" items="${descriptor.getComputerConnectorDescriptors()}">
+        <f:dropdownListBlock value="${d.clazz.name}" name="${d.displayName}"
+                             selected="${st.computerConnector.descriptor==d}"
+                             title="${d.displayName}">
+          <j:set var="descriptor" value="${d}"/>
+          <j:set var="instance" value="${st.computerConnector.descriptor==d ? st.computerConnector : null}"/>
+          <f:invisibleEntry>
+            <input type="hidden" name="stapler-class" value="${d.clazz.name}"/>
+          </f:invisibleEntry>
+          <st:include from="${d}" page="${d.configPage}" optional="true"/>
+        </f:dropdownListBlock>
+      </j:forEach>
+    </f:dropdownList>
+
+    <!--
+    <j:if test="${h.getRetentionStrategyDescriptors().size() gt 1}">
+      <f:dropdownList name="slave.retentionStrategy" title="${%Availability}"
+                      help="/help/system-config/master-slave/availability.html">
+        <j:forEach var="d" items="${h.getRetentionStrategyDescriptors()}">
+          <j:if test="${d != null}">
+            <f:dropdownListBlock value="${d.clazz.name}" name="${d.displayName}"
+                                 selected="${it.retentionStrategy.descriptor==d}"
+                                 title="${d.displayName}">
+              <j:set var="descriptor" value="${d}"/>
+              <j:set var="instance"
+                     value="${it.retentionStrategy.descriptor==d ? it.retentionStrategy : null}"/>
+              <tr>
+                <td>
+                  <input type="hidden" name="stapler-class" value="${d.clazz.name}"/>
+                </td>
+              </tr>
+              <st:include from="${d}" page="${d.configPage}" optional="true"/>
+            </f:dropdownListBlock>
+          </j:if>
+        </j:forEach>
+      </f:dropdownList>
+    </j:if>
+    -->
+
+    <!--
+    <f:descriptorList title="${%Node Properties}" descriptors="${h.getNodePropertyDescriptors(descriptor.clazz)}"
+                      field="nodeProperties"/>
+  -->
+    <f:entry title="">
+      <div align="right">
+        <f:repeatableDeleteButton/>
+      </div>
+    </f:entry>
+    </f:section>
+  </table>
 </j:jelly>

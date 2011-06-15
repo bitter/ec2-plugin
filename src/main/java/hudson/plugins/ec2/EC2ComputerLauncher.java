@@ -5,6 +5,7 @@ import hudson.model.Descriptor;
 import hudson.model.TaskListener;
 import hudson.plugins.ec2.EC2Computer;
 import hudson.plugins.ec2.InstanceState;
+import hudson.slaves.ComputerConnector;
 import hudson.slaves.ComputerLauncher;
 import hudson.slaves.SlaveComputer;
 
@@ -21,9 +22,14 @@ import com.xerox.amazonws.ec2.EC2Exception;
  *
  * @author Kohsuke Kawaguchi
  */
-public abstract class EC2ComputerLauncher extends ComputerLauncher {
+public class EC2ComputerLauncher extends ComputerLauncher {
 
     protected static final int NUMBER_OF_RETRIES = 120;
+    public final ComputerConnector computerConnector;
+
+    protected EC2ComputerLauncher(ComputerConnector computerConnector) {
+        this.computerConnector = computerConnector;
+    }
 
     @Override
     public void launch(SlaveComputer _computer, TaskListener listener) {
@@ -32,15 +38,13 @@ public abstract class EC2ComputerLauncher extends ComputerLauncher {
             waitForComputerToEnterRunningState(computer, listener.getLogger());
             waitForComputerToRecieveIpAddress(computer, listener.getLogger());
 
-            connect(computer, listener);
+            computerConnector.launch(computer.describeInstance().getDnsName(), listener).launch(_computer, listener);
 
         } catch (EC2Exception e) {
             e.printStackTrace(listener.error(e.getMessage()));
         } catch (InterruptedException e) {
             e.printStackTrace(listener.error(e.getMessage()));
         } catch (IOException e) {
-            e.printStackTrace(listener.error(e.getMessage()));
-        } catch (S3ServiceException e) {
             e.printStackTrace(listener.error(e.getMessage()));
         }
     }
@@ -65,13 +69,6 @@ public abstract class EC2ComputerLauncher extends ComputerLauncher {
             throw new InterruptedException("The instance " + computer.getInstanceId() + " never reached a running state.");
         }
     }
-
-    /**
-     * Stage 2 of the launch. Called after the EC2 instance comes up.
-     */
-    protected abstract void connect(EC2Computer computer, TaskListener listener)
-            throws EC2Exception, IOException, InterruptedException, S3ServiceException;
-
 
     public Descriptor<ComputerLauncher> getDescriptor() {
         throw new UnsupportedOperationException();

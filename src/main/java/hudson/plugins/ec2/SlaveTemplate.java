@@ -1,21 +1,14 @@
 package hudson.plugins.ec2;
 
-import com.xerox.amazonws.ec2.EC2Exception;
-import com.xerox.amazonws.ec2.ImageDescription;
-import com.xerox.amazonws.ec2.InstanceType;
-import com.xerox.amazonws.ec2.Jec2;
-import com.xerox.amazonws.ec2.KeyPairInfo;
+import com.xerox.amazonws.ec2.*;
 import com.xerox.amazonws.ec2.ReservationDescription.Instance;
-import hudson.model.Describable;
-import hudson.model.Descriptor;
-import hudson.model.Descriptor.FormException;
-import hudson.model.Hudson;
-import hudson.model.TaskListener;
-import hudson.model.Label;
-import hudson.model.Node;
 import hudson.Extension;
 import hudson.Util;
+import hudson.model.*;
+import hudson.model.Descriptor.FormException;
+import hudson.model.Node.Mode;
 import hudson.model.labels.LabelAtom;
+import hudson.slaves.ComputerConnector;
 import hudson.util.FormValidation;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
@@ -34,36 +27,32 @@ import java.util.Set;
  * @author Kohsuke Kawaguchi
  */
 public class SlaveTemplate implements Describable<SlaveTemplate> {
+
     public final String ami;
     public final String description;
     public final String remoteFS;
-    public final String sshPort;
     public final InstanceType type;
-    public final String labels;
-    public final String initScript;
+    public final Mode mode;
     public final String userData;
+    public final String labels;
     public final String numExecutors;
-    public final String remoteAdmin;
-    public final String rootCommandPrefix;
-    public final String jvmopts;
+    public final ComputerConnector computerConnector;
+
     protected transient EC2Cloud parent;
 
     private transient /*almost final*/ Set<LabelAtom> labelSet;
 
     @DataBoundConstructor
-    public SlaveTemplate(String ami, String remoteFS, String sshPort, InstanceType type, String labelString, String description, String initScript, String userData, String numExecutors, String remoteAdmin, String rootCommandPrefix, String jvmopts) {
+    public SlaveTemplate(String ami, String remoteFS, InstanceType type, String labelString, String description, String numExecutors, String userData, ComputerConnector computerConnector) {
         this.ami = ami;
         this.remoteFS = remoteFS;
-        this.sshPort = sshPort;
         this.type = type;
+        this.mode = Mode.NORMAL;
+        this.userData = userData;
+        this.computerConnector = computerConnector;
         this.labels = Util.fixNull(labelString);
         this.description = description;
-        this.initScript = initScript;
-        this.userData = userData;
         this.numExecutors = Util.fixNull(numExecutors).trim();
-        this.remoteAdmin = remoteAdmin;
-        this.rootCommandPrefix = rootCommandPrefix;
-        this.jvmopts = jvmopts;
         readResolve(); // initialize
     }
     
@@ -83,25 +72,27 @@ public class SlaveTemplate implements Describable<SlaveTemplate> {
         try {
             return Integer.parseInt(numExecutors);
         } catch (NumberFormatException e) {
-            return EC2Slave.toNumExecutors(type);
+            return toNumExecutors(type);
+        }
+    }
+    public ComputerConnector getComputerConnector() {
+      return computerConnector;
+    }
+
+    /**
+     * See http://aws.amazon.com/ec2/instance-types/
+     */
+    private static int toNumExecutors(InstanceType it) {
+        switch (it) {
+            case DEFAULT:       return 1;
+            case MEDIUM_HCPU:   return 5;
+            case LARGE:         return 4;
+            case XLARGE:        return 8;
+            case XLARGE_HCPU:   return 20;
+            default:            throw new AssertionError();
         }
     }
 
-    public int getSshPort() {
-        try {
-            return Integer.parseInt(sshPort);
-        } catch (NumberFormatException e) {
-            return 22;
-        }
-    }
-    public String getRemoteAdmin() {
-        return remoteAdmin;
-    }
-
-    public String getRootCommandPrefix() {
-        return rootCommandPrefix;
-    }
-    
     /**
      * Does this contain the given label?
      *
@@ -134,7 +125,7 @@ public class SlaveTemplate implements Describable<SlaveTemplate> {
     }
 
     private EC2Slave newSlave(Instance inst) throws FormException, IOException {
-        return new EC2Slave(inst.getInstanceId(), description, remoteFS, getSshPort(), getNumExecutors(), labels, initScript, remoteAdmin, rootCommandPrefix, jvmopts);
+        return new EC2Slave(inst.getInstanceId(), description, remoteFS, getNumExecutors(), mode, labels, computerConnector);
     }
 
     /**
@@ -180,6 +171,11 @@ public class SlaveTemplate implements Describable<SlaveTemplate> {
             String p = super.getHelpFile(fieldName);
             if (p==null)        p = Hudson.getInstance().getDescriptor(EC2Slave.class).getHelpFile(fieldName);
             return p;
+        }
+
+        public static List<Descriptor<ComputerConnector>> getComputerConnectorDescriptors() {
+          return Hudson.getInstance().<ComputerConnector, Descriptor<ComputerConnector>> getDescriptorList(
+              ComputerConnector.class);
         }
 
         /***

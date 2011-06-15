@@ -5,6 +5,7 @@ import hudson.slaves.RetentionStrategy;
 import hudson.util.TimeUnit2;
 import org.kohsuke.stapler.DataBoundConstructor;
 
+import java.io.IOException;
 import java.util.logging.Logger;
 
 /**
@@ -13,6 +14,7 @@ import java.util.logging.Logger;
  * @author Kohsuke Kawaguchi
  */
 public class EC2RetentionStrategy extends RetentionStrategy<EC2Computer> {
+
     @DataBoundConstructor
     public EC2RetentionStrategy() {
     }
@@ -23,7 +25,13 @@ public class EC2RetentionStrategy extends RetentionStrategy<EC2Computer> {
             final long idleMilliseconds = System.currentTimeMillis() - c.getIdleStartMilliseconds();
             if (idleMilliseconds > TimeUnit2.MINUTES.toMillis(30)) {
                 LOGGER.info("Disconnecting "+c.getName());
-                c.getNode().terminate();
+                try {
+                    c.getNode().terminate();
+                } catch (InterruptedException e) {
+                    LOGGER.warning("Failed to shutdown " + c.getName() + "\n" + e.fillInStackTrace());
+                } catch (IOException e) {
+                    LOGGER.warning("Failed to shutdown " + c.getName() + "\n" + e.fillInStackTrace());
+                }
             }
         }
         return 1;

@@ -5,18 +5,19 @@ import com.xerox.amazonws.ec2.Jec2;
 import com.xerox.amazonws.ec2.ReservationDescription;
 import com.xerox.amazonws.ec2.ReservationDescription.Instance;
 import hudson.Util;
-import hudson.slaves.SlaveComputer;
+import hudson.slaves.AbstractCloudComputer;
 import org.kohsuke.stapler.HttpRedirect;
 import org.kohsuke.stapler.HttpResponse;
-import org.kohsuke.stapler.StaplerResponse;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * @author Kohsuke Kawaguchi
  */
-public class EC2Computer extends SlaveComputer {
+public class EC2Computer extends AbstractCloudComputer<EC2Slave> {
     /**
      * Cached description of this EC2 instance. Lazily fetched.
      */
@@ -100,22 +101,13 @@ public class EC2Computer extends SlaveComputer {
     @Override
     public HttpResponse doDoDelete() throws IOException {
         checkPermission(DELETE);
-        getNode().terminate();
+        try {
+            getNode().terminate();
+        } catch (InterruptedException e) {
+            LOGGER.log(Level.WARNING,"Failed to terminate EC2 instance: "+getInstanceId(),e);
+        }
         return new HttpRedirect("..");
     }
 
-    /** What username to use to run root-like commands
-     *
-     */
-    public String getRemoteAdmin() {
-        return getNode().getRemoteAdmin();
-    }
-
-    public int getSshPort() {
-         return getNode().getSshPort();
-     }
-
-    public String getRootCommandPrefix() {
-        return getNode().getRootCommandPrefix();
-    }
+    private static final Logger LOGGER = Logger.getLogger(EC2Computer.class.getName());
 }
